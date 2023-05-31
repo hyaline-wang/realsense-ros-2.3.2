@@ -461,9 +461,16 @@ void BaseRealSenseNode::registerDynamicOption(ros::NodeHandle& nh, rs2::options 
             if (is_checkbox(sensor, option))
             {
                 auto option_value = bool(sensor.get_option(option));
-                if (nh1.param(option_name, option_value, option_value))
+                std::cout<<"option name "<<option_name << " get value"<<option_value<<std::endl;
+                if(i == RS2_OPTION_EMITTER_ON_OFF)
+                {
+                    sensor.set_option(RS2_OPTION_EMITTER_ON_OFF, 1.f); // Enable emitter
+                }
+                else if (nh1.param(option_name, option_value, option_value))
                 {
                     sensor.set_option(option, option_value);
+                    std::cout<<"option name "<<option_name << " set value"<<option_value<<std::endl;
+
                 }
                 ddynrec->registerVariable<bool>(
                 option_name, option_value,
@@ -592,6 +599,34 @@ void BaseRealSenseNode::registerDynamicOption(ros::NodeHandle& nh, rs2::options 
         }
         
     }
+
+
+    // if (sensor.supports(RS2_OPTION_EMITTER_ENABLED))
+    // {
+    //     std::cout<<"RS2_OPTION_EMITTER_ENABLED"<<std::endl;
+    //     std::cout<<"RS2_OPTION_EMITTER_ENABLED"<<sensor.get_option(RS2_OPTION_EMITTER_ENABLED)<<std::endl;
+    //     if (_enable_emitter)
+    //         sensor.set_option(RS2_OPTION_EMITTER_ENABLED, 1.f); // Enable emitter
+    //     else
+    //         sensor.set_option(RS2_OPTION_EMITTER_ENABLED, 0.f); // Disable emitter
+    // }
+    // if (sensor.supports(RS2_OPTION_LASER_POWER))
+    // {
+    //     // Query min and max values:
+    //     auto range = sensor.get_option_range(RS2_OPTION_LASER_POWER);
+    //     if (_enable_emitter)
+    //         sensor.set_option(RS2_OPTION_LASER_POWER, range.max); // Set max power
+    //     else
+    //         sensor.set_option(RS2_OPTION_LASER_POWER, 0.f); // Disable laser
+    // }
+    // if (sensor.supports(RS2_OPTION_EMITTER_ON_OFF)) // zxzx
+    // {
+    //     if (_emitter_on_off)
+    //         sensor.set_option(RS2_OPTION_EMITTER_ON_OFF, 1.f); // Enable emitter
+    //     else
+    //         sensor.set_option(RS2_OPTION_EMITTER_ON_OFF, 0.f); // Disable emitter
+    // }
+
     ddynrec->publishServicesTopics();
     _ddynrec.push_back(ddynrec);
 }
@@ -2413,18 +2448,60 @@ void BaseRealSenseNode::publishFrame(rs2::frame f, const ros::Time& t,
         cam_info.header.stamp = t;
         cam_info.header.seq = seq[stream];
         info_publisher.publish(cam_info);
+        // hao-start
+        // sensor_msgs::ImagePtr img;
+        // img = cv_bridge::CvImage(std_msgs::Header(), encoding.at(stream.first), image).toImageMsg();
+        // img->width = width;
+        // img->height = height;
+        // img->is_bigendian = false;
+        // img->step = width * bpp;
+        // img->header.frame_id = cam_info.header.frame_id;
+        // img->header.stamp = t;
+        // img->header.seq = seq[stream];
 
-        sensor_msgs::ImagePtr img;
-        img = cv_bridge::CvImage(std_msgs::Header(), encoding.at(stream.first), image).toImageMsg();
-        img->width = width;
-        img->height = height;
-        img->is_bigendian = false;
-        img->step = width * bpp;
-        img->header.frame_id = cam_info.header.frame_id;
-        img->header.stamp = t;
-        img->header.seq = seq[stream];
+        // image_publisher.first.publish(img);
+        // if(stream.first == rs2_stream::RS2_STREAM_DEPTH)
+        // {
+        //     ROS_WARN("RS2_STREAM_DEPTH");
+        // }
+        if(
+             (stream.first == rs2_stream::RS2_STREAM_COLOR) || 
+             (stream.first == rs2_stream::RS2_STREAM_INFRARED    && !(int)f.get_frame_metadata(RS2_FRAME_METADATA_FRAME_LASER_POWER_MODE) ) ||
+             (stream.first == rs2_stream::RS2_STREAM_DEPTH &&   (int)f.get_frame_metadata(RS2_FRAME_METADATA_FRAME_LASER_POWER_MODE)  ) )
+        {
+            sensor_msgs::ImagePtr img;
+            img = cv_bridge::CvImage(std_msgs::Header(), encoding.at(stream.first), image).toImageMsg();
+            img->width = width;
+            img->height = height;
+            img->is_bigendian = false;
+            img->step = width * bpp;
+            img->header.frame_id = cam_info.header.frame_id;
+            img->header.stamp = t;
+            img->header.seq = seq[stream];
+            image_publisher.first.publish(img);
+            // std::cout<<"if "<<!(seq[stream] % 2) <<" "<<(seq[stream] % 2)<<std::endl;
 
-        image_publisher.first.publish(img);
+        }
+        // else{
+        //     if(stream.first == rs2_stream::RS2_STREAM_INFRARED)
+        //     {
+        //         ROS_WARN("THROW OUT ,RS2_STREAM_INFRARED");
+        //     }
+        //     if(stream.first == rs2_stream::RS2_STREAM_DEPTH)
+        //     {
+        //         ROS_WARN("THROW OUT ,RS2_STREAM_DEPTH");
+        //     }
+        //     if(stream.first == rs2_stream::RS2_STREAM_COLOR)
+        //     {
+        //         ROS_WARN("THROW OUT ,RS2_STREAM_COLOR");
+        //     }
+        //     std::cout<<!(seq[stream] % 2) <<" "<<(seq[stream] % 2)<<std::endl;
+
+        // }
+        // std::cout<<(int)f.get_frame_metadata(RS2_FRAME_METADATA_FRAME_LASER_POWER_MODE)<<std::endl;
+
+        // hao-end
+
         ROS_DEBUG("%s stream published", rs2_stream_to_string(f.get_profile().stream_type()));
     }
     if (is_publishMetadata)
